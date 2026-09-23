@@ -1,0 +1,419 @@
+{
+  "name": "Autonomous B2B Lead Nurturing & Booking Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-trigger",
+      "name": "Lead Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "lead-intake-webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"received\", \"message\": \"Lead is being processed\" }",
+        "options": {}
+      },
+      "id": "node-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize lead data from Webflow, WordPress, or direct POST\nconst body = $input.first().json.body || $input.first().json;\n\nconst lead = {\n  firstName: body.first_name || body.firstName || body.name?.split(' ')[0] || 'Unknown',\n  lastName: body.last_name || body.lastName || body.name?.split(' ')[1] || '',\n  email: body.email || body.Email || '',\n  phone: body.phone || body.Phone || body.phone_number || '',\n  company: body.company || body.Company || body.company_name || '',\n  jobTitle: body.job_title || body.jobTitle || body.role || '',\n  companySize: body.company_size || body.companySize || body.employees || '',\n  budget: body.budget || body.Budget || '',\n  industry: body.industry || body.Industry || '',\n  message: body.message || body.Message || body.how_can_we_help || '',\n  website: body.website || body.Website || body.company_website || '',\n  source: body.source || body._source || 'webform',\n  submittedAt: new Date().toISOString()\n};\n\n// Basic validation\nif (!lead.email) {\n  throw new Error('Lead missing email address — cannot process.');\n}\n\nreturn [{ json: lead }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Lead Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "gpt-4o",
+          "temperature": 0.2,
+          "max_tokens": 400,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a B2B lead qualification expert. Score leads from 0-100 based on ICP fit. Return ONLY valid JSON with these exact keys: score (number 0-100), tier (\"hot\"|\"warm\"|\"cold\"), reasoning (string, max 100 words), detectedPainPoints (array of strings), companySignals (array of strings), decisionMakerLikelihood (\"high\"|\"medium\"|\"low\")."
+            },
+            {
+              "role": "user",
+              "content": "=Qualify this B2B lead:\n\nName: {{ $json.firstName }} {{ $json.lastName }}\nEmail: {{ $json.email }}\nCompany: {{ $json.company }}\nJob Title: {{ $json.jobTitle }}\nCompany Size: {{ $json.companySize }}\nBudget: {{ $json.budget }}\nIndustry: {{ $json.industry }}\nMessage: {{ $json.message }}\nWebsite: {{ $json.website }}\n\nReturn a JSON qualification with score, tier, reasoning, detectedPainPoints, companySignals, decisionMakerLikelihood."
+            }
+          ]
+        }
+      },
+      "id": "node-qualify-llm",
+      "name": "Qualify Lead (GPT-4o)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Normalize Lead Data').first().json;\nconst rawContent = $input.first().json.choices[0].message.content;\n\n// Strip markdown code fences if present\nconst cleaned = rawContent.replace(/```json|```/g, '').trim();\nlet qualification;\ntry {\n  qualification = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Failed to parse GPT-4o qualification JSON: ' + rawContent);\n}\n\nreturn [{\n  json: {\n    lead,\n    qualification: {\n      score: qualification.score || 0,\n      tier: qualification.tier || 'cold',\n      reasoning: qualification.reasoning || '',\n      detectedPainPoints: qualification.detectedPainPoints || [],\n      companySignals: qualification.companySignals || [],\n      decisionMakerLikelihood: qualification.decisionMakerLikelihood || 'low'\n    }\n  }\n}];"
+      },
+      "id": "node-parse-qualification",
+      "name": "Parse Qualification Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "hot-condition",
+              "leftValue": "={{ $json.qualification.tier }}",
+              "rightValue": "hot",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "node-route-hot",
+      "name": "Is Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "warm-condition",
+              "leftValue": "={{ $json.qualification.tier }}",
+              "rightValue": "warm",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "node-route-warm",
+      "name": "Is Warm Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1180, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "gpt-4o",
+          "temperature": 0.7,
+          "max_tokens": 800,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an expert B2B sales copywriter. Write highly personalized outreach emails that feel human, reference the prospect's specific situation, and drive a clear CTA. Return ONLY valid JSON with keys: subject (string), body (string, plain text with \\n line breaks), previewText (string, max 90 chars)."
+            },
+            {
+              "role": "user",
+              "content": "=Write a personalized sales email for:\n\nProspect: {{ $json.lead.firstName }} {{ $json.lead.lastName }}, {{ $json.lead.jobTitle }} at {{ $json.lead.company }}\nIndustry: {{ $json.lead.industry }}\nPain Points Detected: {{ $json.qualification.detectedPainPoints.join(', ') }}\nCompany Signals: {{ $json.qualification.companySignals.join(', ') }}\nOriginal Message: {{ $json.lead.message }}\n\nTone: Professional but warm, not salesy.\nCTA: Book a 30-minute call using this link: {{ $env.BOOKING_PAGE_URL }}\nSign off as: {{ $env.GMAIL_SENDER_NAME }} from {{ $env.COMPANY_NAME }}\n\nReturn JSON with subject, body, previewText."
+            }
+          ]
+        }
+      },
+      "id": "node-draft-email",
+      "name": "Draft Personalized Email (GPT-4o)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1420, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const upstream = $('Parse Qualification Result').first().json;\nconst rawContent = $input.first().json.choices[0].message.content;\n\nconst cleaned = rawContent.replace(/```json|```/g, '').trim();\nlet emailDraft;\ntry {\n  emailDraft = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Failed to parse email draft JSON: ' + rawContent);\n}\n\nreturn [{\n  json: {\n    ...upstream,\n    emailDraft: {\n      subject: emailDraft.subject || 'Following up on your inquiry',\n      body: emailDraft.body || '',\n      previewText: emailDraft.previewText || ''\n    }\n  }\n}];"
+      },
+      "id": "node-parse-email",
+      "name": "Parse Email Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 220]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.lead.email }}",
+        "subject": "={{ $json.emailDraft.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.emailDraft.body }}",
+        "options": {
+          "senderName": "={{ $env.GMAIL_SENDER_NAME }}"
+        }
+      },
+      "id": "node-send-email",
+      "name": "Send Email via Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1900, 220],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-credentials",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call/phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "assistantId": "={{ $env.VAPI_ASSISTANT_ID }}",
+          "phoneNumberId": "={{ $env.VAPI_FROM_PHONE_NUMBER }}",
+          "customer": {
+            "number": "={{ $json.lead.phone }}",
+            "name": "={{ $json.lead.firstName }} {{ $json.lead.lastName }}"
+          },
+          "assistantOverrides": {
+            "variableValues": {
+              "leadFirstName": "={{ $json.lead.firstName }}",
+              "leadCompany": "={{ $json.lead.company }}",
+              "painPoint": "={{ $json.qualification.detectedPainPoints[0] || 'your business challenges' }}",
+              "bookingUrl": "={{ $env.BOOKING_PAGE_URL }}"
+            }
+          },
+          "scheduledAt": "={{ new Date(Date.now() + ($env.VAPI_CALL_DELAY_MINUTES || 15) * 60000).toISOString() }}"
+        }
+      },
+      "id": "node-vapi-call",
+      "name": "Schedule Vapi AI Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1900, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CRM_PROVIDER === 'hubspot' ? 'https://api.hubapi.com/crm/v3/objects/contacts' : 'https://services.leadconnectorhq.com/contacts/' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"properties\": {\n    \"firstname\": \"{{ $json.lead.firstName }}\",\n    \"lastname\": \"{{ $json.lead.lastName }}\",\n    \"email\": \"{{ $json.lead.email }}\",\n    \"phone\": \"{{ $json.lead.phone }}\",\n    \"company\": \"{{ $json.lead.company }}\",\n    \"jobtitle\": \"{{ $json.lead.jobTitle }}\",\n    \"industry\": \"{{ $json.lead.industry }}\",\n    \"hs_lead_status\": \"{{ $json.qualification.tier === 'hot' ? 'IN_PROGRESS' : $json.qualification.tier === 'warm' ? 'NEW' : 'UNQUALIFIED' }}\",\n    \"lead_score\": \"{{ $json.qualification.score }}\",\n    \"lead_source\": \"{{ $json.lead.source }}\",\n    \"message\": \"{{ $json.lead.message }}\"\n  }\n}"
+      },
+      "id": "node-crm-sync",
+      "name": "Sync to CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2140, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "gpt-4o",
+          "temperature": 0.7,
+          "max_tokens": 600,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a B2B sales copywriter. Write a warm nurture email for a lead that showed interest but isn't ready to buy yet. Keep it helpful and educational, not salesy. Return ONLY valid JSON with keys: subject (string), body (string), previewText (string)."
+            },
+            {
+              "role": "user",
+              "content": "=Write a nurture email for:\n\nProspect: {{ $json.lead.firstName }}, {{ $json.lead.jobTitle }} at {{ $json.lead.company }}\nPain Points: {{ $json.qualification.detectedPainPoints.join(', ') }}\nReasoning: {{ $json.qualification.reasoning }}\n\nShare a helpful insight or resource. CTA: soft invite to reply with questions.\nSign off as: {{ $env.GMAIL_SENDER_NAME }} from {{ $env.COMPANY_NAME }}"
+            }
+          ]
+        }
+      },
+      "id": "node-warm-email",
+      "name": "Draft Warm Nurture Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1420, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const upstream = $('Parse Qualification Result').first().json;\nconst rawContent = $input.first().json.choices[0].message.content;\nconst cleaned = rawContent.replace(/```json|```/g, '').trim();\nlet emailDraft;\ntry {\n  emailDraft = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Failed to parse warm email JSON');\n}\nreturn [{ json: { ...upstream, emailDraft } }];"
+      },
+      "id": "node-parse-warm-email",
+      "name": "Parse Warm Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 500]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.lead.email }}",
+        "subject": "={{ $json.emailDraft.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.emailDraft.body }}",
+        "options": {
+          "senderName": "={{ $env.GMAIL_SENDER_NAME }}"
+        }
+      },
+      "id": "node-send-warm-email",
+      "name": "Send Warm Nurture Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1900, 500],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-credentials",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Parse Qualification Result').first().json;\nconsole.log(`[COLD LEAD] ${data.lead.email} scored ${data.qualification.score} — added to cold nurture sequence.`);\nreturn [{ json: { ...data, action: 'cold_nurture_sequence', status: 'queued' } }];"
+      },
+      "id": "node-cold-action",
+      "name": "Tag as Cold / Nurture Later",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 680]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final log node — all paths converge here for audit logging\nconst items = $input.all();\nconst results = items.map(item => ({\n  email: item.json?.lead?.email || 'unknown',\n  tier: item.json?.qualification?.tier || 'unknown',\n  score: item.json?.qualification?.score || 0,\n  action: item.json?.action || 'full_outreach',\n  processedAt: new Date().toISOString()\n}));\nconsole.log('[LEAD ENGINE] Processed:', JSON.stringify(results, null, 2));\nreturn items;"
+      },
+      "id": "node-audit-log",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2380, 300]
+    }
+  ],
+  "connections": {
+    "Lead Intake Webhook": {
+      "main": [
+        [
+          { "node": "Respond to Webhook", "type": "main", "index": 0 },
+          { "node": "Normalize Lead Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Normalize Lead Data": {
+      "main": [
+        [{ "node": "Qualify Lead (GPT-4o)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Qualify Lead (GPT-4o)": {
+      "main": [
+        [{ "node": "Parse Qualification Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Qualification Result": {
+      "main": [
+        [
+          { "node": "Is Hot Lead?", "type": "main", "index": 0 },
+          { "node": "Is Warm Lead?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Is Hot Lead?": {
+      "main": [
+        [{ "node": "Draft Personalized Email (GPT-4o)", "type": "main", "index": 0 }],
+        [{ "node": "Tag as Cold / Nurture Later", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Warm Lead?": {
+      "main": [
+        [{ "node": "Draft Warm Nurture Email", "type": "main", "index": 0 }],
+        [{ "node": "Tag as Cold / Nurture Later", "type": "main", "index": 0 }]
+      ]
+    },
+    "Draft Personalized Email (GPT-4o)": {
+      "main": [
+        [{ "node": "Parse Email Draft", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Email Draft": {
+      "main": [
+        [
+          { "node": "Send Email via Gmail", "type": "main", "index": 0 },
+          { "node": "Schedule Vapi AI Call", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Email via Gmail": {
+      "main": [
+        [{ "node": "Sync to CRM", "type": "main", "index": 0 }]
+      ]
+    },
+    "Schedule Vapi AI Call": {
+      "main": [
+        [{ "node": "Sync to CRM", "type": "main", "index": 0 }]
+      ]
+    },
+    "Draft Warm Nurture Email": {
+      "main": [
+        [{ "node": "Parse Warm Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Warm Email": {
+      "main": [
+        [{ "node": "Send Warm Nurture Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Warm Nurture Email": {
+      "main": [
+        [{ "node": "Sync to CRM", "type": "main", "index": 0 }]
+      ]
+    },
+    "Tag as Cold / Nurture Later": {
+      "main": [
+        [{ "node": "Sync to CRM", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sync to CRM": {
+      "main": [
+        [{ "node": "Audit Log", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "n8nVersion": "1.0.0"
+  },
+  "tags": ["b2b", "lead-nurturing", "ai-automation"]
+}

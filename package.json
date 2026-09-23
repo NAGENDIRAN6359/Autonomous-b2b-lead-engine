@@ -1,0 +1,36 @@
+{
+  "name": "b2b-lead-nurturing-engine",
+  "version": "1.0.0",
+  "description": "Autonomous B2B lead nurturing and booking engine — OpenAI, Vapi, Google Workspace, HubSpot/GoHighLevel",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "lint": "eslint src/ index.js config/",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "axios": "1.20.0",
+    "dotenv": "16.4.5",
+    "express": "5.1.0",
+    "googleapis": "181.0.0",
+    "openai": "4.52.2"
+  },
+  "devDependencies": {
+    "eslint": "9.7.0"
+  },
+  "keywords": [
+    "b2b",
+    "lead-nurturing",
+    "ai-automation",
+    "openai",
+    "vapi",
+    "hubspot",
+    "gohighlevel",
+    "n8n"
+  ],
+  "license": "MIT"
+}
