@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Lead Qualifier — Live Demo by Nagendiran</title>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<div class="hero">
+  <div class="badge">⚡ Live AI Demo — See it qualify in real time</div>
+  <h1>Watch AI Qualify Your<br/>B2B Lead Instantly</h1>
+  <p>Pick your industry, fill in a lead, and watch the AI score them 0–100, detect pain points, and trigger the right action — all in under 10 seconds.</p>
+  <div class="stats">
+    <div class="stat"><div class="stat-num">&lt;10s</div><div class="stat-label">Qualification time</div></div>
+    <div class="stat"><div class="stat-num">0–100</div><div class="stat-label">ICP score</div></div>
+    <div class="stat"><div class="stat-num">3</div><div class="stat-label">Tiers detected</div></div>
+    <div class="stat"><div class="stat-num">0</div><div class="stat-label">Human involvement</div></div>
+  </div>
+</div>
+
+<div class="section-label">Select your industry to see a relevant demo</div>
+<div class="niche-grid">
+  <div class="niche-card" onclick="selectNiche('saas')" id="niche-saas"><div class="niche-icon">💻</div><div class="niche-name">SaaS</div></div>
+  <div class="niche-card" onclick="selectNiche('realestate')" id="niche-realestate"><div class="niche-icon">🏠</div><div class="niche-name">Real Estate</div></div>
+  <div class="niche-card" onclick="selectNiche('finance')" id="niche-finance"><div class="niche-icon">💰</div><div class="niche-name">Finance</div></div>
+  <div class="niche-card" onclick="selectNiche('ecommerce')" id="niche-ecommerce"><div class="niche-icon">🛒</div><div class="niche-name">E-commerce</div></div>
+  <div class="niche-card" onclick="selectNiche('agency')" id="niche-agency"><div class="niche-icon">🎯</div><div class="niche-name">Agency</div></div>
+</div>
+
+<div class="form-container" id="formContainer">
+  <div class="form-card">
+    <div class="form-header">
+      <h2 id="formTitle">Lead Information</h2>
+      <p id="formSubtitle">Fill in the details to see AI qualification in action</p>
+    </div>
+    <form id="leadForm" onsubmit="submitLead(event)">
+      <div class="form-row">
+        <div class="form-group"><label>First Name *</label><input type="text" id="firstName" placeholder="Sarah" required/></div>
+        <div class="form-group"><label>Last Name *</label><input type="text" id="lastName" placeholder="Chen" required/></div>
+      </div>
+      <div class="form-group"><label>Work Email *</label><input type="email" id="email" placeholder="sarah@company.com" required/></div>
+      <div class="form-row">
+        <div class="form-group"><label>Phone</label><input type="tel" id="phone" placeholder="+1 415 555 1234"/></div>
+        <div class="form-group"><label>Company *</label><input type="text" id="company" placeholder="Acme Corp" required/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Job Title *</label><input type="text" id="jobTitle" placeholder="VP of Sales" required/></div>
+        <div class="form-group">
+          <label>Company Size</label>
+          <select id="companySize">
+            <option value="">Select size</option>
+            <option>1-10 employees</option>
+            <option>11-50 employees</option>
+            <option>51-200 employees</option>
+            <option>201-500 employees</option>
+            <option>500+ employees</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Monthly Budget</label>
+          <select id="budget">
+            <option value="">Select budget</option>
+            <option>Under $1,000</option>
+            <option>$1,000 - $5,000</option>
+            <option>$5,000 - $10,000</option>
+            <option>$10,000 - $25,000</option>
+            <option>$25,000+</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Website</label><input type="url" id="website" placeholder="https://company.com"/></div>
+      </div>
+      <div class="form-group">
+        <label id="nicheLabel">Biggest Challenge</label>
+        <select id="nicheQuestion"><option value="">Select one</option></select>
+      </div>
+      <div class="form-group"><label>Tell us more *</label><textarea id="message" placeholder="Describe your situation..." required></textarea></div>
+      <button type="submit" class="submit-btn">⚡ Qualify This Lead with AI</button>
+    </form>
+  </div>
+</div>
+
+<div class="loading" id="loadingState">
+  <div class="spinner"></div>
+  <p style="color:#9ca3af;font-size:15px;margin-bottom:8px">AI is analyzing this lead...</p>
+  <ul class="loading-steps">
+    <li id="step1"><span class="step-dot"></span> Validating lead data</li>
+    <li id="step2"><span class="step-dot"></span> Scoring ICP fit (0-100)</li>
+    <li id="step3"><span class="step-dot"></span> Detecting pain points</li>
+    <li id="step4"><span class="step-dot"></span> Determining action</li>
+  </ul>
+</div>
+
+<div class="result-card" id="resultCard">
+  <div class="result-inner">
+    <div class="tier-badge" id="tierBadge"></div>
+    <div class="result-name" id="resultName"></div>
+    <div class="result-company" id="resultCompany"></div>
+    <div class="score-section">
+      <div class="score-ring">
+        <svg viewBox="0 0 80 80" width="80" height="80">
+          <circle class="ring-bg" cx="40" cy="40" r="35"/>
+          <circle class="ring-fill" id="ringFill" cx="40" cy="40" r="35"/>
+        </svg>
+        <div class="score-number" id="scoreNum">0</div>
+      </div>
+      <div class="score-info">
+        <h3>ICP Score</h3>
+        <p id="scoreReason"></p>
+      </div>
+    </div>
+    <div class="result-section"><h4>Detected Pain Points</h4><div class="tags" id="painTags"></div></div>
+    <div class="result-section"><h4>Company Signals</h4><div class="tags" id="signalTags"></div></div>
+    <div class="action-box"><h4>Actions Triggered Automatically</h4><div id="actionsList"></div></div>
+    <div class="demo-note" id="demoNote"></div>
+    <button class="try-again-btn" onclick="resetForm()">Try another lead</button>
+  </div>
+</div>
+
+<div class="hiw">
+  <h2>How it works in production</h2>
+  <div class="hiw-grid">
+    <div class="hiw-card"><div class="hiw-num">1</div><h3>Lead submits form</h3><p>From your website, Webflow, or WordPress</p></div>
+    <div class="hiw-card"><div class="hiw-num">2</div><h3>AI qualifies</h3><p>GPT-4o scores the lead 0-100 in seconds</p></div>
+    <div class="hiw-card"><div class="hiw-num">3</div><h3>Email sent</h3><p>Personalized email referencing their exact problem</p></div>
+    <div class="hiw-card"><div class="hiw-num">4</div><h3>AI calls them</h3><p>Vapi AI places an outbound call to book a slot</p></div>
+    <div class="hiw-card"><div class="hiw-num">5</div><h3>CRM updated</h3><p>HubSpot or GoHighLevel updated automatically</p></div>
+  </div>
+</div>
+
+<footer>
+  Built by <a href="https://www.linkedin.com/in/nagendiran" target="_blank">Nagendiran</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/NAGENDIRAN6359/Autonomous-b2b-lead-engine" target="_blank">View on GitHub</a>
+  &nbsp;·&nbsp;
+  <a href="https://calendly.com/p-nagendiran6359/30min" target="_blank">Book a Demo Call</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
